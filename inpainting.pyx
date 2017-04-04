@@ -23,6 +23,25 @@ ctypedef int (*boolean)(double, double) nogil
 
 cdef Pixel unfilled_pixel
 
+cdef extern from "utils.h":
+    inline double add(double x, double y) nogil
+    inline double subtract(double x, double y) nogil
+    inline double multiply(double x, double y) nogil
+    inline double divide(double x, double y) nogil
+    inline double absolute(double x, double y) nogil
+    inline int equals(double x, double y) nogil
+    inline int not_equals(double x, double y) nogil
+    inline int greater_than(double x, double y) nogil
+    ctypedef struct Coord:
+        int x, y
+    ctypedef struct Pixel:
+        double x, y, z
+    Pixel unfilled_pixel
+    ctypedef struct Locations:
+        int* x
+        int* y
+        int length
+
 cdef Coord get_first_where(double[:,:] matrix, double val, boolean boo) nogil:
     cdef:
         int i,j
