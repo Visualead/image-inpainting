@@ -23,25 +23,6 @@ ctypedef int (*boolean)(double, double) nogil
 
 cdef Pixel unfilled_pixel
 
-cdef extern from "utils.h":
-    inline double add(double x, double y) nogil
-    inline double subtract(double x, double y) nogil
-    inline double multiply(double x, double y) nogil
-    inline double divide(double x, double y) nogil
-    inline double absolute(double x, double y) nogil
-    inline int equals(double x, double y) nogil
-    inline int not_equals(double x, double y) nogil
-    inline int greater_than(double x, double y) nogil
-    ctypedef struct Coord:
-        int x, y
-    ctypedef struct Pixel:
-        double x, y, z
-    Pixel unfilled_pixel
-    ctypedef struct Locations:
-        int* x
-        int* y
-        int length
-
 cdef Coord get_first_where(double[:,:] matrix, double val, boolean boo) nogil:
     cdef:
         int i,j
@@ -623,7 +604,9 @@ cpdef void inpaint(np.ndarray[DTYPE_t, ndim=3] src_im, np.ndarray[DTYPE_t, ndim=
 
             with gil:
                 nx = ndimage.sobel(mask, 0)
-                ny = -ndimage.sobel(mask, 1)
+                ny = ndimage.sobel(mask, 1)
+
+            do_math_all_matrix(ny, -1, &multiply)
 
             highest_priority = find_max_priority(boundary_points, confidence, dy, dx, ny, nx, patch_size, 255.0)
             free(boundary_points.x)

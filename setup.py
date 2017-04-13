@@ -6,7 +6,7 @@ import numpy
 
 ext_modules=[
     Extension("inpainting",
-              sources=["inpainting.pyx", "utils.c"],
+              sources=["inpainting.pyx"],
               include_dirs=["numpy.get_include()"],
               libraries=["m"],
               extra_compile_args=["-O3", "-ffast-math", "-march=native", "-fopenmp"],
