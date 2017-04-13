@@ -4,7 +4,7 @@
 import numpy as np
 cimport numpy as np
 from cython cimport view
-from libc.math cimport sqrt, pow, fabs
+from libc.math cimport sqrt, pow, fabs, INFINITY
 from libc.stdlib cimport malloc, free, realloc
 from pylab import imshow, imsave
 import matplotlib.pyplot as plt
@@ -402,28 +402,10 @@ cdef inline Coord find_max_priority(Locations boundary_points,
     """
     # initialize first priority value
     cdef:
-        int initial_x = boundary_points.x[0], initial_y = boundary_points.y[0]
-        int x = initial_x, y = initial_y
-        float conf = matrix_sum(get_patch(x, y, confidence, patch_size)) / pow(patch_size, 2) # confidence value
-        double[:,:] grad = hypot(dx, dy)
-        # a gradient has value of 0 on the boundary so get the maximum gradient magnitude in a patch
-        double[:,:] grad_patch = get_patch(x, y, grad, patch_size)
-        Coord xx_n_yy = get_first_where(grad_patch, matrix_max(grad_patch), &equals)
-        int xx = xx_n_yy.x
-        int yy = xx_n_yy.y
-        float max_gradx = dx[xx,yy], max_grady = dy[xx,yy]
-        float Nx = nx[x,y], Ny = ny[x,y]
-        float data = fabs(max_gradx * Nx + max_grady * Ny)
-        double curr_p, curr_conf, curr_data = 0
-        double[:,:] curr_patch
+        double[:,:] grad = hypot(dx, dy), grad_patch, curr_patch
+        double curr_p, curr_conf, curr_data, max_gradx, max_grady, Nx, Ny, norm, max_p = -INFINITY
         int i, curr_bd_x, curr_bd_y
-        Coord coord
-
-    if (pow(Nx, 2) + pow(Ny, 2)) != 0:
-        data /= (pow(Nx, 2) + pow(Ny, 2))
-        
-    cdef float max_p = conf * (data / alpha) # initial priority value
-    do_math_all_matrix(grad_patch, -1, &absolute)
+        Coord coord, argmax
 
     # iterate through all patches centered at a pixel on the boundary of
     # unfilled region to find the patch with the highest priority value
@@ -436,28 +418,25 @@ cdef inline Coord find_max_priority(Locations boundary_points,
         # so get the maximum gradient magnitude in a patch
         grad_patch = get_patch(curr_bd_x, curr_bd_y, grad, patch_size)
         do_math_all_matrix(grad_patch, -1, &absolute)
-        xx_n_yy = get_first_where(grad_patch, matrix_max(grad_patch), &equals)
-        xx = xx_n_yy.x
-        yy = xx_n_yy.y
-
-        max_gradx = dx[xx,yy]
-        max_grady = dy[xx,yy]
+        argmax = get_first_where(grad_patch, matrix_max(grad_patch), &equals)
+        max_gradx = dx[argmax.x,argmax.y]
+        max_grady = dy[argmax.x,argmax.y]
 
         Nx = nx[curr_bd_x,curr_bd_y]
         Ny = ny[curr_bd_x,curr_bd_y]
+        norm = pow(Nx, 2) + pow(Ny, 2)
+        if norm != 0:
+            norm = sqrt(norm)
+            Nx /= norm
+            Ny /= norm
 
         curr_data = fabs(max_gradx * Nx + max_grady * Ny)
-        if (pow(Nx, 2) + pow(Ny, 2)) != 0:
-            curr_data /= sqrt(pow(Nx, 2) + pow(Ny, 2))
 
-        curr_p = curr_conf * (curr_data / alpha)
+        curr_p = curr_conf * curr_data
         if curr_p > max_p:
             max_p = curr_p
-            x = curr_bd_x
-            y = curr_bd_y
-
-    coord.x = x
-    coord.y = y
+            coord.x = curr_bd_x
+            coord.y = curr_bd_y
 
     return coord
 
@@ -493,8 +472,7 @@ cdef inline double[:,:,:] find_exemplar_patch_ssd(double[:,:,:] img, double[:,:,
     """
     
     cdef: 
-        int offset = patch_size / 2
-        int x_boundary = img.shape[0], y_boundary = img.shape[1]
+        int offset = patch_size / 2, x_boundary = img.shape[0], y_boundary = img.shape[1]
         # offset the borders of the image by offset pixels to avoid
         # looking through patches that are out of the region
         double[:,:,:] img_copy = img[offset:x_boundary-offset+1, offset:y_boundary-offset+1, :]
@@ -503,11 +481,8 @@ cdef inline double[:,:,:] find_exemplar_patch_ssd(double[:,:,:] img, double[:,:,
         int* xx = filled_region.x # x coordinates of the unfilled region
         int* yy = filled_region.y # y coordinates of the unfilled region
         double[:,:,:] best_patch, exemplar_patch
-        double ssd, min_ssd
+        double ssd, min_ssd = INFINITY
         int i, best_x, best_y, x_offset, y_offset
-
-    with gil:
-        min_ssd = np.inf
 
     for i in range(filled_region.length):
         x_offset = xx[i] + offset
@@ -584,7 +559,7 @@ cpdef void inpaint(np.ndarray[DTYPE_t, ndim=3] src_im, np.ndarray[DTYPE_t, ndim=
 
     # compute gradients with sobel operators
     init_dx = ndimage.sobel(grayscale, 0)
-    init_dy = -ndimage.sobel(grayscale, 1)
+    init_dy = ndimage.sobel(grayscale, 1)
 
     with nogil:
         while unfilled_region.length > 0:
@@ -606,9 +581,7 @@ cpdef void inpaint(np.ndarray[DTYPE_t, ndim=3] src_im, np.ndarray[DTYPE_t, ndim=
                 nx = ndimage.sobel(mask, 0)
                 ny = ndimage.sobel(mask, 1)
 
-            do_math_all_matrix(ny, -1, &multiply)
-
-            highest_priority = find_max_priority(boundary_points, confidence, dy, dx, ny, nx, patch_size, 255.0)
+            highest_priority = find_max_priority(boundary_points, confidence, dx, dy, nx, ny, patch_size, 1.0)
             free(boundary_points.x)
             free(boundary_points.y)
             max_x = highest_priority.x
