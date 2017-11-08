@@ -2,8 +2,9 @@ import numpy as np
 cimport numpy as np
 from libc.math cimport sqrt
 from pylab import *
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 from scipy.misc import imread, imresize
+from skimage.io import imsave
 from scipy.ndimage import filters
 from PIL import Image
 from scipy import ndimage
@@ -397,7 +398,11 @@ cpdef update(x, y,
             
     return confidence, mask
     
-cpdef inpaint(src_im, mask_im, save_name,
+#cpdef inpaint(src_im, mask_im, save_name,
+#              gaussian_blur=0, 
+#              gaussian_sigma=1, 
+#              patch_size=9):
+cpdef inpaint(src_im, mask_im,
               gaussian_blur=0, 
               gaussian_sigma=1, 
               patch_size=9):
@@ -424,8 +429,10 @@ cpdef inpaint(src_im, mask_im, save_name,
     unfilled_img : 3-D array
         The inpainted image.
     '''
-    dot = save_name.rfind('.')
-    save_name = save_name[:dot] + '-inpainted.jpg'
+    print "beginning inpaint"
+    #dot = save_name.rfind('.')
+    #save_name = save_name[:dot] + '-inpainted.jpg'
+    #save_name2 = save_name[:dot] + '-inpainted2.jpg'
     
     cdef:
         np.ndarray src = src_im
@@ -439,6 +446,11 @@ cpdef inpaint(src_im, mask_im, save_name,
         np.ndarray[DTYPE_t, ndim=3] max_patch, copied_patch
     
     unfilled_img = src/255.0
+    #print "max value of unfilled_img"
+    #print np.max(unfilled_img)
+    #print np.min(unfilled_img)
+    #imsave(save_name2, np.array(255*unfilled_img/np.max(unfilled_img),dtype=np.uint8)) # save intermediate results
+
     mask = mask/255.0
     grayscale = src[:,:,0]*.2125 + src[:,:,1]*.7154 + src[:,:,2]*.0721
     grayscale /= 255.0
@@ -448,7 +460,8 @@ cpdef inpaint(src_im, mask_im, save_name,
     
     # place holder value for unfilled pixels
     unfilled_img[np.where(mask == 0.0)] = [0.0, 0.9999, 0.0] 
-        
+    #imsave(save_name2, np.array(255*unfilled_img,dtype=np.uint8)) # save intermediate results
+
     if gaussian_blur == 1:
         # gaussian smoothing for computing gradients
         grayscale = ndimage.gaussian_filter(grayscale, gaussian_sigma) 
@@ -503,9 +516,11 @@ cpdef inpaint(src_im, mask_im, save_name,
                                         patch_size)
         patch_count += 1
         print patch_count, 'patches inpainted', highest_priority[1:], '<-', best_patch[1:]
-        imsave(save_name, unfilled_img) # save intermediate results
+        #print unfilled_img.shape
+        #imsave(save_name, unfilled_img) # save intermediate results
+    return unfilled_img
     
     # show the result
-    plt.title('Inpainted Image')
-    plt.axis('off')
-    plt.show(imshow(unfilled_img))
+    #plt.title('Inpainted Image')
+    #plt.axis('off')
+    #plt.show(imshow(unfilled_img))
